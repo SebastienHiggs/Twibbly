@@ -12,7 +12,8 @@ dependencies = [
     "dotenv (>=0.9.9,<0.10.0)",
     "python-dotenv (>=1.1.0,<2.0.0)",
     "supabase (>=2.15.0,<3.0.0)",
-    "reportlab (>=4.4.0,<5.0.0)"
+    "reportlab (>=4.4.0,<5.0.0)",
+    "pywin32 (>=310,<311)"
 ]
 
 [tool.poetry]
