@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from PIL import Image, ImageDraw, ImageFont
 
-class Printer():
+class Printer:
     def __init__(self):
         # 🪵 Configure logging
         logging.basicConfig(
@@ -16,6 +16,9 @@ class Printer():
             handlers=[logging.StreamHandler()]
         )
         self.logger = logging.getLogger(__name__)
+
+        self.label_image_path = None
+        self.os_type = platform.system()
 
         if self.os_type == "Windows":
             self._init_windows()
@@ -30,71 +33,93 @@ class Printer():
             self.win32print = win32print
             self.win32api = win32api
         except ImportError:
-            print("[WARN] win32print or win32api not available.")
+            self.logger.warning("win32print or win32api not available.")
+            self.win32print = None
+            self.win32api = None
 
     def _init_linux(self):
         try:
             import cups
             self.cups = cups
         except ImportError:
-            print("[WARN] cups not available.")
+            self.logger.warning("cups not available.")
+            self.cups = None
 
     def print_name(self, first_name, last_name):
-        pass
+        self._generate_label_image(first_name, last_name)
 
-    def generate_label_image(self, first_name, last_name) -> str:
+        if not self.label_image_path:
+            self.logger.error("Failed to generate label image file.")
+            return
+
+        try:
+            if self.os_type == "Windows" and self.win32print:
+                self._print_image_windows()
+            elif self.os_type == "Linux" and self.cups:
+                self._print_image_linux()
+            else:
+                self.logger.error("No supported printing backend available.")
+        finally:
+            # Clean up the temp file
+            if self.label_image_path and os.path.exists(self.label_image_path):
+                os.remove(self.label_image_path)
+                self.logger.debug(f"Deleted temp file {self.label_image_path}")
+            self.label_image_path = None
+
+    def _generate_label_image(self, first_name, last_name):
         try:
             self.logger.debug(f"Generating label image for: {first_name} {last_name}")
             image = Image.new('RGB', (400, 200), color='white')
             draw = ImageDraw.Draw(image)
-            font_large = ImageFont.truetype("arial.ttf", 36)
-            font_small = ImageFont.truetype("arial.ttf", 24)
+
+            try:
+                font_large = ImageFont.truetype("arial.ttf", 36)
+                font_small = ImageFont.truetype("arial.ttf", 24)
+            except IOError:
+                font_large = ImageFont.load_default()
+                font_small = ImageFont.load_default()
 
             draw.text((200, 60), first_name, font=font_large, fill='black', anchor="mm")
             draw.text((200, 130), last_name, font=font_small, fill='black', anchor="mm")
 
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-            image.save(temp_file.name)
-            self.logger.info(f"Label image saved to {temp_file.name}")
-            return temp_file.name
-        except Exception as e:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp:
+                image.save(temp.name)
+                self.label_image_path = temp.name
+                self.logger.info(f"Label image saved to {self.label_image_path}")
+        except Exception:
             self.logger.exception("Failed to generate label image")
             raise
 
-    def print_file(self, filepath: str):
-        system = platform.system()
+    def _print_image_windows(self):
         try:
-            self.logger.info(f"Attempting to print on {system}...")
+            import win32ui
+            from PIL import ImageWin
 
-            if system == "Windows" and win32print:
-                import win32ui
-                from PIL import ImageWin, Image
+            printer_name = self.win32print.GetDefaultPrinter()
+            hdc = win32ui.CreateDC()
+            hdc.CreatePrinterDC(printer_name)
+            hdc.StartDoc("Nametag")
+            hdc.StartPage()
 
-                printer_name = win32print.GetDefaultPrinter()
-                hdc = win32ui.CreateDC()
-                hdc.CreatePrinterDC(printer_name)
-                hdc.StartDoc("Nametag")
-                hdc.StartPage()
+            img = Image.open(self.label_image_path)
+            dib = ImageWin.Dib(img)
+            dib.draw(hdc.GetHandleOutput(), (0, 0, img.width, img.height))
 
-                img = Image.open(filepath)
-                dib = ImageWin.Dib(img)
-                # Define printable rectangle — (left, top, right, bottom)
-                dib.draw(hdc.GetHandleOutput(), (0, 0, img.width, img.height))
+            hdc.EndPage()
+            hdc.EndDoc()
+            hdc.DeleteDC()
+            self.logger.info("Printed label image on Windows.")
+        except Exception:
+            self.logger.exception("Failed to print image on Windows")
 
-                hdc.EndPage()
-                hdc.EndDoc()
-                hdc.DeleteDC()
-                self.logger.info("Printed to default Windows printer silently.")
-
-            elif system in {"Linux", "Darwin"} and cups:
-                conn = cups.Connection()
-                printer_name = conn.getDefault()
-                conn.printFile(printer_name, filepath, "Nametag", {})
-                self.logger.info(f"Printed to {printer_name} on Unix-like OS.")
-            else:
-                raise EnvironmentError("No compatible printing method found.")
-        except Exception as e:
-            self.logger.exception("Printing failed")
+    def _print_image_linux(self):
+        try:
+            conn = self.cups.Connection()
+            printer_name = conn.getDefault()
+            conn.printFile(printer_name, self.label_image_path, "Nametag", {})
+            self.logger.info(f"Printed to {printer_name} on Linux.")
+        except Exception:
+            self.logger.exception("Failed to print image on Linux")
 
 
 class Twibbly():
