@@ -17,6 +17,8 @@ class Printer:
         )
         self.logger = logging.getLogger(__name__)
 
+        self.selected_printer = None
+
         self.label_image_path = None
         self.os_type = platform.system()
 
@@ -95,7 +97,7 @@ class Printer:
             import win32ui
             from PIL import ImageWin
 
-            printer_name = self.win32print.GetDefaultPrinter()
+            printer_name = self.selected_printer or self.win32print.GetDefaultPrinter()
             hdc = win32ui.CreateDC()
             hdc.CreatePrinterDC(printer_name)
             hdc.StartDoc("Nametag")
@@ -115,11 +117,37 @@ class Printer:
     def _print_image_linux(self):
         try:
             conn = self.cups.Connection()
-            printer_name = conn.getDefault()
+            printer_name = self.selected_printer or conn.getDefault()
             conn.printFile(printer_name, self.label_image_path, "Nametag", {})
             self.logger.info(f"Printed to {printer_name} on Linux.")
         except Exception:
             self.logger.exception("Failed to print image on Linux")
+
+    def list_printers(self):
+        try:
+            if self.os_type == "Windows" and self.win32print:
+                printers = [printer[2] for printer in self.win32print.EnumPrinters(2)]
+            elif self.os_type == "Linux" and self.cups:
+                conn = self.cups.Connection()
+                printers = list(conn.getPrinters().keys())
+            else:
+                raise EnvironmentError("Printer listing not supported on this OS.")
+            self.logger.info(f"Available printers: {printers}")
+            return printers
+        except Exception:
+            self.logger.exception("Failed to list printers.")
+            return []
+        
+    def select_printer(self, printer_name):
+        printers = self.list_printers()
+        if printer_name in printers:
+            self.selected_printer = printer_name
+            self.logger.info(f"Selected printer: {printer_name}")
+        else:
+            self.logger.warning(f"Printer '{printer_name}' not found. Available: {printers}")
+            self.selected_printer = None
+
+
 
 
 class Twibbly():
@@ -147,45 +175,50 @@ class Twibbly():
         self.logger.info("Supabase client initialized.")
 
         self.printer = Printer()
+        self.printer.select_printer(printer_name='DYMO LabelWriter 450')
 
-    def loop_code(self, printed_ids = None):
-        if printed_ids == None:
-            printed_ids = set()
-
+    def get_updated_table(self):
         response = self.supabase.from_("name_entries") \
-                    .select("id, first_name, last_name") \
-                    .eq("session_id", self.SESSION_ID) \
-                    .order("created_at", desc=False) \
-                    .execute()
+                        .select("id, first_name, last_name, printed") \
+                        .eq("session_id", self.SESSION_ID) \
+                        .order("created_at", desc=False) \
+                        .execute()
+        return response
+    
+    def set_row_printed_true(self, row):
+        self.supabase.from_("name_entries") \
+            .update({"printed": True}) \
+            .eq("id", row["id"]) \
+            .execute()
+
+    def loop_code(self):
+        response = self.get_updated_table()
                 
         if not response.data:
             self.logger.debug("No new entries found.")
             return
 
         for row in response.data:
-            row_id = row["id"]
-            if row_id not in printed_ids:
-                full_name = f"{row['first_name']} {row['last_name']}"
-                self.logger.info(f"Processing new name entry: {full_name}")
-                filepath = self.printer.generate_label_image(row["first_name"], row["last_name"])
-                self.printer.print_file(filepath)
-                time.sleep(3)
-                printed_ids.add(row_id)
+            if not row["printed"]:
+                self.logger.info(f"Processing new name entry: {row['first_name']} {row['last_name']}")
+                self.printer.print_name(first_name=row['first_name'], last_name=row['last_name'])
+                self.set_row_printed_true(row)
 
     def main(self):
         self.logger.info("Starting main loop...")
+
         printed_ids = set()
         while True:
             try:
-                self.loop_code(printed_ids)
+                self.loop_code()
             except Exception as e:
                 self.logger.exception("Error during polling loop")
             time.sleep(2)
 
 if __name__ == "__main__":
-    # twibbly = Twibbly()
-    # twibbly.loop_code()
+    twibbly = Twibbly()
+    twibbly.main()
     # printer = Printer()
-    # printer.
-    import platform
-    print(platform.system())
+    # printer.list_printers()
+    # printer.select_printer(printer_name='DYMO LabelWriter 450')
+    # printer.print_name(first_name="Sebas", last_name="Fig")
