@@ -3,8 +3,9 @@ import os
 import platform
 import logging
 import tempfile
+import asyncio
 from dotenv import load_dotenv
-from supabase import create_client, Client
+from supabase import create_client, Client, acreate_client, AClient
 from PIL import Image, ImageDraw, ImageFont
 
 class Printer:
@@ -150,7 +151,7 @@ class Printer:
             self.selected_printer = None
 
 
-class Twibbly():
+class Twibbly2():
     def __init__(self):
         # 🪵 Configure logging
         logging.basicConfig(
@@ -222,6 +223,52 @@ class Twibbly():
                 self.logger.exception("Error during polling loop")
             time.sleep(2)
 
+class Twibbly():
+    def __init__(self):
+        self._load_auth()
+        self._create_client()
+    
+    def _load_auth(self):
+        load_dotenv()
+        self.SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
+        self.SUPABASE_KEY = os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+        self.SESSION_ID = os.getenv("SESSION_ID")
+    
+    async def _create_client(self):
+        self.supabase: AClient = await acreate_client(self.SUPABASE_URL, self.SUPABASE_KEY)
+
+    # 📥 What to do when a new row is inserted
+    async def handle_insert_async(self, payload):
+        print(f"{payload}")
+        new_row = payload["new"]
+        if new_row["session_id"] != self.SESSION_ID:
+            return
+        print(f"🖨️ Got new row: {new_row['first_name']} {new_row['last_name']}")
+
+        # ✅ Print and mark as printed (example only)
+        # printer.print_name(new_row["first_name"], new_row["last_name"])
+        await self.supabase.table("name_entries").update({"printed": True}).eq("id", new_row["id"]).execute()
+
+    def handle_insert(self, payload):
+        asyncio.create_task(self.handle_insert_async(payload))
+
+    async def main(self):
+        # 📡 Connect to realtime
+        await self.supabase.realtime.connect()
+
+        await (
+            self.supabase.realtime
+            .channel("name_entries_channel")
+            .on_postgres_changes("INSERT", schema="public", table="name_entries", callback=self.handle_insert)
+            .subscribe()
+        )
+
+        print("🔔 Listening for new name entries...")
+        await self.supabase.realtime.listen()  # Keeps it alive and dispatching events
+        await asyncio.sleep(300)
+    
+
+# 🚀 Run the async main function
 if __name__ == "__main__":
-    twibbly = Twibbly()
-    twibbly.loop_code()
+    twib = Twibbly()
+    asyncio.run(twib.main())
