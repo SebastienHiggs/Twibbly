@@ -61,12 +61,14 @@ class Printer:
                 self._print_image_linux()
             else:
                 self.logger.error("No supported printing backend available.")
+            return True
         finally:
             # Clean up the temp file
             if self.label_image_path and os.path.exists(self.label_image_path):
                 os.remove(self.label_image_path)
                 self.logger.debug(f"Deleted temp file {self.label_image_path}")
             self.label_image_path = None
+            return False
 
     def _generate_label_image(self, first_name, last_name):
         try:
@@ -148,8 +150,6 @@ class Printer:
             self.selected_printer = None
 
 
-
-
 class Twibbly():
     def __init__(self):
         # 🪵 Configure logging
@@ -173,6 +173,10 @@ class Twibbly():
         self.logger.info("Environment variables loaded successfully.")
         self.supabase: Client = create_client(self.SUPABASE_URL, self.SUPABASE_KEY)
         self.logger.info("Supabase client initialized.")
+
+        # session_exists = self.supabase.from_("sessions").select("id").eq("id", self.SESSION_ID).maybe_single().execute()
+        # if not session_exists.data:
+        #     self.logger.warning(f"Session ID {self.SESSION_ID} does not exist in 'sessions' table.")
 
         self.printer = Printer()
         self.printer.select_printer(printer_name='DYMO LabelWriter 450')
@@ -201,8 +205,10 @@ class Twibbly():
         for row in response.data:
             if not row["printed"]:
                 self.logger.info(f"Processing new name entry: {row['first_name']} {row['last_name']}")
-                self.printer.print_name(first_name=row['first_name'], last_name=row['last_name'])
-                self.set_row_printed_true(row)
+                print_success = self.printer.print_name(first_name=row['first_name'], last_name=row['last_name'])
+                if print_success:
+                    self.set_row_printed_true(row)
+                    input()
 
     def main(self):
         self.logger.info("Starting main loop...")
@@ -210,10 +216,12 @@ class Twibbly():
         while True:
             try:
                 self.loop_code()
+            except KeyboardInterrupt:
+                self.logger.info("Shutting down gracefully.")
             except Exception as e:
                 self.logger.exception("Error during polling loop")
             time.sleep(2)
 
 if __name__ == "__main__":
     twibbly = Twibbly()
-    twibbly.main()
+    twibbly.loop_code()
