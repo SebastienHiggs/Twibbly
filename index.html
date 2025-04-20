@@ -39,31 +39,31 @@
       document.body.innerHTML = "<p style='color:red'>Missing secrets. Please create a secrets.js file.</p>";
       throw new Error("Missing Supabase credentials.");
     }
-
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
+  
+    const client = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  
     const urlParams = new URLSearchParams(window.location.search);
     const sessionId = urlParams.get('session_id');
-
+  
     const statusEl = document.getElementById('status');
     const formEl = document.getElementById('nameForm');
-
+  
     if (!sessionId) {
       formEl.style.display = "none";
       statusEl.textContent = "Error: No session ID found in the URL.";
       statusEl.style.color = "red";
     }
-
+  
     formEl.addEventListener('submit', async (e) => {
       e.preventDefault();
-
+  
       const name = document.getElementById('nameInput').value.trim();
       if (!name) return;
-
-      const { error } = await supabase
+  
+      const { error } = await client
         .from('name_entries')
         .insert([{ name, session_id: sessionId }]);
-
+  
       if (error) {
         statusEl.textContent = `Error: ${error.message}`;
         statusEl.style.color = 'red';
@@ -74,5 +74,6 @@
       }
     });
   </script>
+  
 </body>
 </html>
