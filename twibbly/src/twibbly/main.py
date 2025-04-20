@@ -207,7 +207,6 @@ class Twibbly():
     def main(self):
         self.logger.info("Starting main loop...")
 
-        printed_ids = set()
         while True:
             try:
                 self.loop_code()
@@ -218,7 +217,3 @@ class Twibbly():
 if __name__ == "__main__":
     twibbly = Twibbly()
     twibbly.main()
-    # printer = Printer()
-    # printer.list_printers()
-    # printer.select_printer(printer_name='DYMO LabelWriter 450')
-    # printer.print_name(first_name="Sebas", last_name="Fig")
