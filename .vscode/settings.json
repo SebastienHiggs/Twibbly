@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Poetry Run main.py",
+        "type": "python",
+        "request": "launch",
+        "console": "integratedTerminal",
+        "cwd": "${workspaceFolder}",
+        "program": "${workspaceFolder}/src/twibbly/main.py",
+        "envFile": "${workspaceFolder}/src/twibbly/.env",
+        "python": "poetry",
+        "args": [],
+        "justMyCode": true
+      }
+    ]
+  }
+  
