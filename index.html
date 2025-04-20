@@ -26,7 +26,8 @@
 <body>
   <h1>Enter Your Name</h1>
   <form id="nameForm">
-    <input type="text" id="nameInput" placeholder="Your name" required />
+    <input type="text" id="firstNameInput" placeholder="Your first name" required />
+    <input type="text" id="lastNameInput" placeholder="Your last name" />
     <button type="submit">Submit</button>
   </form>
   <p id="status"></p>
@@ -57,12 +58,18 @@
     formEl.addEventListener('submit', async (e) => {
       e.preventDefault();
   
-      const name = document.getElementById('nameInput').value.trim();
-      if (!name) return;
+      const firstName = document.getElementById('firstNameInput').value.trim();
+      const lastName = document.getElementById('lastNameInput').value.trim();
+  
+      if (!firstName || !lastName) {
+        statusEl.textContent = 'Please enter both first and last names.';
+        statusEl.style.color = 'red';
+        return;
+      }
   
       const { error } = await client
         .from('name_entries')
-        .insert([{ name, session_id: sessionId }]);
+        .insert([{ first_name: firstName, last_name: lastName, session_id: sessionId }]);
   
       if (error) {
         statusEl.textContent = `Error: ${error.message}`;
@@ -74,6 +81,7 @@
       }
     });
   </script>
+  
   
 </body>
 </html>
