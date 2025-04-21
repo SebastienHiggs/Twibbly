@@ -224,20 +224,23 @@ class Twibbly2():
             time.sleep(2)
 
 class Twibbly():
-    def __init__(self):
-        self._load_auth()
-        self._create_client()
-    
-    def _load_auth(self):
-        load_dotenv()
-        self.SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-        self.SUPABASE_KEY = os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
-        self.SESSION_ID = os.getenv("SESSION_ID")
-    
-    async def _create_client(self):
-        self.supabase: AClient = await acreate_client(self.SUPABASE_URL, self.SUPABASE_KEY)
+    def __init__(self, supabase, session_id):
+        self.supabase = supabase
+        self.SESSION_ID = session_id
 
-    # 📥 What to do when a new row is inserted
+    @classmethod
+    async def create(cls):
+        load_dotenv()
+        SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
+        SUPABASE_KEY = os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+        SESSION_ID = os.getenv("SESSION_ID")
+
+        if not all([SUPABASE_URL, SUPABASE_KEY, SESSION_ID]):
+            raise RuntimeError("Missing required environment variables")
+
+        supabase = await acreate_client(SUPABASE_URL, SUPABASE_KEY)
+        return cls(supabase, SESSION_ID)
+
     async def handle_insert_async(self, payload):
         print(f"{payload}")
         new_row = payload["new"]
@@ -245,17 +248,13 @@ class Twibbly():
             return
         print(f"🖨️ Got new row: {new_row['first_name']} {new_row['last_name']}")
 
-        # ✅ Print and mark as printed (example only)
-        # printer.print_name(new_row["first_name"], new_row["last_name"])
         await self.supabase.table("name_entries").update({"printed": True}).eq("id", new_row["id"]).execute()
 
     def handle_insert(self, payload):
         asyncio.create_task(self.handle_insert_async(payload))
 
     async def main(self):
-        # 📡 Connect to realtime
         await self.supabase.realtime.connect()
-
         await (
             self.supabase.realtime
             .channel("name_entries_channel")
@@ -264,11 +263,13 @@ class Twibbly():
         )
 
         print("🔔 Listening for new name entries...")
-        await self.supabase.realtime.listen()  # Keeps it alive and dispatching events
+        await self.supabase.realtime.listen()
         await asyncio.sleep(300)
     
 
 # 🚀 Run the async main function
 if __name__ == "__main__":
-    twib = Twibbly()
-    asyncio.run(twib.main())
+    async def _run():
+        await (await Twibbly.create()).main()
+
+    asyncio.run(_run())
