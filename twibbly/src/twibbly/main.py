@@ -45,9 +45,20 @@ class Printer:
         self.label_height = int((height_mm / 25.4) * self.dpi)
         self.logger.info(f"Label size set: {width_mm}x{height_mm} mm ({self.label_width}x{self.label_height} px)")
 
-    def print_name(self, first_name, last_name):
+    def print_name(self, first_name, last_name, preview_only=False):
         if not self._generate_label_image(first_name, last_name):
             return False
+
+        if preview_only:
+            try:
+                Image.open(self.label_image_path).show()
+                self.logger.info("Previewed label image.")
+                return True
+            finally:
+                if self.label_image_path and os.path.exists(self.label_image_path):
+                    os.remove(self.label_image_path)
+                    self.logger.debug(f"Deleted temp file {self.label_image_path}")
+                    self.label_image_path = None
 
         try:
             if self.os_type == "Windows" and self.win32print:
@@ -62,7 +73,8 @@ class Printer:
             if self.label_image_path and os.path.exists(self.label_image_path):
                 os.remove(self.label_image_path)
                 self.logger.debug(f"Deleted temp file {self.label_image_path}")
-                self.label_image_path = None
+            self.label_image_path = None
+
 
     def _generate_label_image(self, first_name, last_name):
         try:
@@ -195,5 +207,5 @@ async def async_main():
 if __name__ == "__main__":
     # asyncio.run(async_main())
     printer = Printer()
-    printer.select_printer(printer_name='DYMO LabelWriter 450')
+    printer.select_printer(name='DYMO LabelWriter 450')
     printer.print_name("Mee", "Youu")
