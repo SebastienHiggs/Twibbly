@@ -75,28 +75,38 @@ class Printer:
                 self.logger.debug(f"Deleted temp file {self.label_image_path}")
             self.label_image_path = None
 
-
     def _generate_label_image(self, first_name, last_name):
         try:
-            img = Image.new('RGB', (self.label_width, self.label_height), 'white')
+            img = Image.new('1', (self.label_width, self.label_height), 1)  # 1-bit image, white background
             draw = ImageDraw.Draw(img)
+
+            draw.rectangle(
+                [(0, 0), (self.label_width - 1, self.label_height - 1)],
+                outline=0,  # black border in 1-bit mode
+                width=10
+            )
+
             try:
                 font_large = ImageFont.truetype("arial.ttf", int(self.label_height * 0.25))
                 font_small = ImageFont.truetype("arial.ttf", int(self.label_height * 0.15))
             except IOError:
                 font_large = font_small = ImageFont.load_default()
 
-            draw.text((self.label_width // 2, int(self.label_height * 0.35)), first_name, font=font_large, fill='black', anchor='mm')
-            draw.text((self.label_width // 2, int(self.label_height * 0.7)), last_name, font=font_small, fill='black', anchor='mm')
+            fill = 0  # black in 1-bit mode
+            draw.text((self.label_width // 2, int(self.label_height * 0.35)),
+                    first_name, font=font_large, fill=fill, anchor='mm')
+            draw.text((self.label_width // 2, int(self.label_height * 0.7)),
+                    last_name, font=font_small, fill=fill, anchor='mm')
 
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp:
-                img.save(temp.name)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".bmp") as temp:
+                img.save(temp.name, dpi=(self.dpi, self.dpi))  # embed DPI
                 self.label_image_path = temp.name
                 self.logger.info(f"Label image saved to {temp.name}")
             return True
         except Exception:
             self.logger.exception("Failed to generate label image")
             return False
+
 
     def _print_image_windows(self):
         try:
@@ -208,4 +218,4 @@ if __name__ == "__main__":
     # asyncio.run(async_main())
     printer = Printer()
     printer.select_printer(name='DYMO LabelWriter 450')
-    printer.print_name("Mee", "Youu")
+    printer.print_name("Mee", "Youu", False)
