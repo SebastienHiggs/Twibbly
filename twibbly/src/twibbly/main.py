@@ -1,15 +1,14 @@
-import time
 import os
 import platform
 import logging
 import tempfile
 import asyncio
 from dotenv import load_dotenv
-from supabase import create_client, Client, acreate_client, AClient
+from supabase import acreate_client, AClient
 from PIL import Image, ImageDraw, ImageFont
 
 class Printer:
-    def __init__(self):
+    def __init__(self, label_width_mm=100, label_height_mm=50, dpi=203):
         # 🪵 Configure logging
         logging.basicConfig(
             level=logging.INFO,
@@ -17,6 +16,9 @@ class Printer:
             handlers=[logging.StreamHandler()]
         )
         self.logger = logging.getLogger(__name__)
+
+        self.dpi = dpi
+        self.set_label_size_mm(label_width_mm, label_height_mm)
 
         self.selected_printer = None
 
@@ -48,6 +50,13 @@ class Printer:
             self.logger.warning("cups not available.")
             self.cups = None
 
+    def set_label_size_mm(self, width_mm, height_mm):
+        """Set label size in millimeters and convert to pixels internally."""
+        self.label_width = int((width_mm / 25.4) * self.dpi)
+        self.label_height = int((height_mm / 25.4) * self.dpi)
+        self.logger.info(f"Label size set to {width_mm}x{height_mm} mm ({self.label_width}x{self.label_height} px)")
+
+
     def print_name(self, first_name, last_name):
         self._generate_label_image(first_name, last_name)
 
@@ -72,20 +81,23 @@ class Printer:
             return False
 
     def _generate_label_image(self, first_name, last_name):
+        width = self.label_width
+        height = self.label_height
         try:
-            self.logger.debug(f"Generating label image for: {first_name} {last_name}")
-            image = Image.new('RGB', (400, 200), color='white')
+            self.logger.debug(f"Generating label image for: {first_name} {last_name} ({width}x{height})")
+            image = Image.new('RGB', (width, height), color='white')
             draw = ImageDraw.Draw(image)
 
+            # Scale fonts proportionally
             try:
-                font_large = ImageFont.truetype("arial.ttf", 36)
-                font_small = ImageFont.truetype("arial.ttf", 24)
+                font_large = ImageFont.truetype("arial.ttf", int(height * 0.25))  # ~25% of height
+                font_small = ImageFont.truetype("arial.ttf", int(height * 0.15))  # ~15% of height
             except IOError:
                 font_large = ImageFont.load_default()
                 font_small = ImageFont.load_default()
 
-            draw.text((200, 60), first_name, font=font_large, fill='black', anchor="mm")
-            draw.text((200, 130), last_name, font=font_small, fill='black', anchor="mm")
+            draw.text((width // 2, int(height * 0.35)), first_name, font=font_large, fill='black', anchor="mm")
+            draw.text((width // 2, int(height * 0.7)), last_name, font=font_small, fill='black', anchor="mm")
 
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp:
                 image.save(temp.name)
@@ -94,6 +106,7 @@ class Printer:
         except Exception:
             self.logger.exception("Failed to generate label image")
             raise
+
 
     def _print_image_windows(self):
         try:
@@ -206,6 +219,9 @@ async def async_main():
     await twib.main()
 
 if __name__ == "__main__":
-    asyncio.run(async_main())
+    # asyncio.run(async_main())
+    printer = Printer()
+    printer.select_printer(printer_name='DYMO LabelWriter 450')
+    printer.print_name("Mee", "Youu")
 
 
