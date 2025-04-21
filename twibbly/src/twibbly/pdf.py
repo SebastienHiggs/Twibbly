@@ -7,41 +7,51 @@ import win32print
 SUMATRA_PATH = r"C:\Users\Sebastien\AppData\Local\SumatraPDF\SumatraPDF.exe"  # Update if installed elsewhere
 LABEL_FILENAME = "label.pdf"
 
-def generate_pdf_label(first_name, last_name, filename=LABEL_FILENAME):
-    label_width_mm = 36
-    label_height_mm = 89
-    page_width = label_width_mm * mm
-    page_height = label_height_mm * mm
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import mm
+import os
 
+LABEL_FILENAME = "label.pdf"
+
+def generate_pdf_label(first_name, last_name, filename=LABEL_FILENAME):
+    # 📐 Exact physical label size in mm
+    LABEL_WIDTH_MM = 36 + 16
+    LABEL_HEIGHT_MM = 89 - 29
+    SAFE_MARGIN_MM = 3  # Padding inside the label, not outside
+
+    # Convert to points (ReportLab uses points)
+    page_width = LABEL_WIDTH_MM * mm
+    page_height = LABEL_HEIGHT_MM * mm
+    margin = SAFE_MARGIN_MM * mm
+
+    # Create a canvas with exact label size
     c = canvas.Canvas(filename, pagesize=(page_width, page_height))
 
-    # Rotate to draw horizontally on vertical label
+    # 🔄 Rotate so text is horizontal on a vertical label
     c.translate(0, page_height)
     c.rotate(-90)
 
-    label_width = page_height  # 89 mm
-    label_height = page_width  # 36 mm
+    # Rotated label width/height
+    label_width = page_height  # becomes width after rotation
+    label_height = page_width  # becomes height after rotation
 
-    # 🔲 Outer border: actual label size (for debugging)
+    # 🟦 Debug: full label boundary
+    c.setStrokeGray(0.75)
     c.setLineWidth(0.5)
-    c.setStrokeGray(0.75)  # Light grey outline for debugging
     c.rect(0, 0, label_width, label_height)
 
-    margin = 15
+    # 🔲 Safe print zone inside the label
+    safe_x = margin
+    safe_y = margin
+    safe_width = label_width - 2 * margin
+    safe_height = label_height - 2 * margin
 
-    # 📏 Safe margin box (~3mm padding)
-    margin_x = margin * mm
-    margin_y = margin * mm
-    safe_x = margin_x
-    safe_y = margin_y
-    safe_width = label_width - 2 * margin_x
-    safe_height = label_height - 2 * margin_y
-
-    c.setStrokeGray(0)  # black
+    # 🟩 Debug: safe margin zone
+    c.setStrokeGray(0)
     c.setLineWidth(1)
-    c.rect(0, 0, safe_width, safe_height)
+    c.rect(safe_x, safe_y, safe_width, safe_height)
 
-    # 🖋 Text centered in safe zone
+    # 🖋 Centered text in safe area
     center_x = label_width / 2
     c.setFont("Helvetica-Bold", 20)
     c.drawCentredString(center_x, safe_y + safe_height * 0.65, first_name)
@@ -51,7 +61,9 @@ def generate_pdf_label(first_name, last_name, filename=LABEL_FILENAME):
 
     c.showPage()
     c.save()
-    print(f"✅ PDF label with margins saved to: {os.path.abspath(filename)}")
+
+    print(f"✅ Label PDF saved: {os.path.abspath(filename)}")
+
 
 
 def get_printers():
