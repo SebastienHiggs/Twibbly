@@ -150,79 +150,6 @@ class Printer:
             self.logger.warning(f"Printer '{printer_name}' not found. Available: {printers}")
             self.selected_printer = None
 
-
-class Twibbly2():
-    def __init__(self):
-        # 🪵 Configure logging
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s | %(levelname)-8s | %(message)s",
-            handlers=[logging.StreamHandler()]
-        )
-        self.logger = logging.getLogger(__name__)
-
-        # 🔐 Load secrets from .env
-        load_dotenv()
-        self.SUPABASE_URL = os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-        self.SUPABASE_KEY = os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
-        self.SESSION_ID = os.getenv("SESSION_ID")
-
-        if not all([self.SUPABASE_URL, self.SUPABASE_KEY, self.SESSION_ID]):
-            self.logger.critical("Missing environment variables in .env file. Exiting.")
-            raise RuntimeError("Missing environment variables in .env")
-
-        self.logger.info("Environment variables loaded successfully.")
-        self.supabase: Client = create_client(self.SUPABASE_URL, self.SUPABASE_KEY)
-        self.logger.info("Supabase client initialized.")
-
-        # session_exists = self.supabase.from_("sessions").select("id").eq("id", self.SESSION_ID).maybe_single().execute()
-        # if not session_exists.data:
-        #     self.logger.warning(f"Session ID {self.SESSION_ID} does not exist in 'sessions' table.")
-
-        self.printer = Printer()
-        self.printer.select_printer(printer_name='DYMO LabelWriter 450')
-
-    def get_updated_table(self):
-        response = self.supabase.from_("name_entries") \
-                        .select("id, first_name, last_name, printed") \
-                        .eq("session_id", self.SESSION_ID) \
-                        .order("created_at", desc=False) \
-                        .execute()
-        return response
-    
-    def set_row_printed_true(self, row):
-        self.supabase.from_("name_entries") \
-            .update({"printed": True}) \
-            .eq("id", row["id"]) \
-            .execute()
-
-    def loop_code(self):
-        response = self.get_updated_table()
-                
-        if not response.data:
-            self.logger.debug("No new entries found.")
-            return
-
-        for row in response.data:
-            if not row["printed"]:
-                self.logger.info(f"Processing new name entry: {row['first_name']} {row['last_name']}")
-                print_success = self.printer.print_name(first_name=row['first_name'], last_name=row['last_name'])
-                if print_success:
-                    self.set_row_printed_true(row)
-                    input()
-
-    def main(self):
-        self.logger.info("Starting main loop...")
-
-        while True:
-            try:
-                self.loop_code()
-            except KeyboardInterrupt:
-                self.logger.info("Shutting down gracefully.")
-            except Exception as e:
-                self.logger.exception("Error during polling loop")
-            time.sleep(2)
-
 class Twibbly():
     def __init__(self, supabase, session_id):
         self.supabase = supabase
@@ -242,13 +169,16 @@ class Twibbly():
         return cls(supabase, SESSION_ID)
 
     async def handle_insert_async(self, payload):
-        print(f"{payload}")
-        new_row = payload["new"]
-        if new_row["session_id"] != self.SESSION_ID:
-            return
-        print(f"🖨️ Got new row: {new_row['first_name']} {new_row['last_name']}")
+        data = payload["data"]
+        record = data["record"]
+        first_name = record["first_name"]
+        last_name = record["last_name"]
+        row_id = record["id"]
+        # if new_row["session_id"] != self.SESSION_ID:
+        #     return
+        print(f"🖨️ Got new row: {first_name} {last_name}")
 
-        await self.supabase.table("name_entries").update({"printed": True}).eq("id", new_row["id"]).execute()
+        await self.supabase.table("name_entries").update({"printed": True}).eq("id", row_id).execute()
 
     def handle_insert(self, payload):
         asyncio.create_task(self.handle_insert_async(payload))
@@ -265,11 +195,12 @@ class Twibbly():
         print("🔔 Listening for new name entries...")
         await self.supabase.realtime.listen()
         await asyncio.sleep(300)
-    
 
-# 🚀 Run the async main function
+async def async_main():
+    twib = await Twibbly.create()
+    await twib.main()
+
 if __name__ == "__main__":
-    async def _run():
-        await (await Twibbly.create()).main()
+    asyncio.run(async_main())
 
-    asyncio.run(_run())
+
