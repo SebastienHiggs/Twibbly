@@ -8,7 +8,7 @@ from supabase import acreate_client, AClient
 from PIL import Image, ImageDraw, ImageFont
 
 class Printer:
-    def __init__(self, label_width_mm=100, label_height_mm=50, dpi=203):
+    def __init__(self, label_width_mm=90, label_height_mm=50, dpi=200):
         logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-8s | %(message)s")
         self.logger = logging.getLogger(__name__)
         self.dpi = dpi
@@ -83,7 +83,7 @@ class Printer:
             draw.rectangle(
                 [(0, 0), (self.label_width - 1, self.label_height - 1)],
                 outline=0,  # black border in 1-bit mode
-                width=10
+                width=100
             )
 
             try:
@@ -97,6 +97,8 @@ class Printer:
                     first_name, font=font_large, fill=fill, anchor='mm')
             draw.text((self.label_width // 2, int(self.label_height * 0.7)),
                     last_name, font=font_small, fill=fill, anchor='mm')
+            
+            img = img.rotate(-90, expand=True)
 
             with tempfile.NamedTemporaryFile(delete=False, suffix=".bmp") as temp:
                 img.save(temp.name, dpi=(self.dpi, self.dpi))  # embed DPI
@@ -106,7 +108,6 @@ class Printer:
         except Exception:
             self.logger.exception("Failed to generate label image")
             return False
-
 
     def _print_image_windows(self):
         try:
