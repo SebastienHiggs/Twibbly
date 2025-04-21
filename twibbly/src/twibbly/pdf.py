@@ -8,15 +8,27 @@ SUMATRA_PATH = r"C:\Users\Sebastien\AppData\Local\SumatraPDF\SumatraPDF.exe"  # 
 LABEL_FILENAME = "label.pdf"
 
 def generate_pdf_label(first_name, last_name, filename=LABEL_FILENAME):
-    width_mm, height_mm = 60, 35  # Landscape label: 60mm wide x 35mm tall
-    page_size = landscape((width_mm * mm, height_mm * mm))
-    c = canvas.Canvas(filename, pagesize=page_size)
+    # Physical label size: 36mm (width) x 89mm (height)
+    label_width_mm = 36
+    label_height_mm = 89
+    page_width = label_width_mm * mm
+    page_height = label_height_mm * mm
+
+    c = canvas.Canvas(filename, pagesize=(page_width, page_height))
+
+    # Rotate the canvas to write horizontal text on vertical label
+    c.translate(0, page_height)  # Move origin to top-left
+    c.rotate(-90)  # Rotate clockwise
+
+    # Now draw text on a virtual 89mm x 36mm landscape layout
+    label_width = page_height
+    label_height = page_width
 
     c.setFont("Helvetica-Bold", 22)
-    c.drawCentredString(page_size[0] / 2, page_size[1] * 0.65, first_name)
+    c.drawCentredString(label_width / 2, label_height * 0.65, first_name)
 
     c.setFont("Helvetica", 16)
-    c.drawCentredString(page_size[0] / 2, page_size[1] * 0.35, last_name)
+    c.drawCentredString(label_width / 2, label_height * 0.35, last_name)
 
     c.showPage()
     c.save()
