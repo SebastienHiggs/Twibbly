@@ -6,7 +6,6 @@ import win32print
 
 SUMATRA_PATH = r"C:\Users\Sebastien\AppData\Local\SumatraPDF\SumatraPDF.exe"  # Change if needed
 
-
 class LabelPrinter:
     def __init__(self, width_mm=52, height_mm=60, margin_mm=3, printer_name=None):
         self.label_width_mm = width_mm

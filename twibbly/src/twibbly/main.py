@@ -4,7 +4,7 @@ import logging
 import asyncio
 from dotenv import load_dotenv
 from supabase import acreate_client, AClient
-from .pdf import LabelPrinter  # This should point to your refactored LabelPrinter class
+from .pdf import LabelPrinter
 
 
 class Twibbly:
@@ -42,8 +42,11 @@ class Twibbly:
         row_id = record["id"]
 
         print(f"🖨️ Got new row: {first_name} {last_name}")
-        self.printer.generate_label(first_name, last_name)
-        self.printer.print_label()
+        preview_only = None
+        # preview_only = True # Comment out for printing
+        if preview_only is True:
+            self.printer.generate_label(first_name, last_name)
+            self.printer.print_label()
 
         await self.supabase.table("name_entries") \
             .update({"printed": True}) \
