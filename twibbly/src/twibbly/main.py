@@ -9,19 +9,11 @@ from PIL import Image, ImageDraw, ImageFont
 
 class Printer:
     def __init__(self, label_width_mm=100, label_height_mm=50, dpi=203):
-        # 🪵 Configure logging
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s | %(levelname)-8s | %(message)s",
-            handlers=[logging.StreamHandler()]
-        )
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-8s | %(message)s")
         self.logger = logging.getLogger(__name__)
-
         self.dpi = dpi
         self.set_label_size_mm(label_width_mm, label_height_mm)
-
         self.selected_printer = None
-
         self.label_image_path = None
         self.os_type = platform.system()
 
@@ -35,34 +27,27 @@ class Printer:
     def _init_windows(self):
         try:
             import win32print, win32api
-            self.win32print = win32print
-            self.win32api = win32api
+            self.win32print, self.win32api = win32print, win32api
         except ImportError:
-            self.logger.warning("win32print or win32api not available.")
-            self.win32print = None
-            self.win32api = None
+            self.logger.warning("Missing win32print/win32api")
+            self.win32print, self.win32api = None, None
 
     def _init_linux(self):
         try:
             import cups
             self.cups = cups
         except ImportError:
-            self.logger.warning("cups not available.")
+            self.logger.warning("Missing cups module")
             self.cups = None
 
     def set_label_size_mm(self, width_mm, height_mm):
-        """Set label size in millimeters and convert to pixels internally."""
         self.label_width = int((width_mm / 25.4) * self.dpi)
         self.label_height = int((height_mm / 25.4) * self.dpi)
-        self.logger.info(f"Label size set to {width_mm}x{height_mm} mm ({self.label_width}x{self.label_height} px)")
-
+        self.logger.info(f"Label size set: {width_mm}x{height_mm} mm ({self.label_width}x{self.label_height} px)")
 
     def print_name(self, first_name, last_name):
-        self._generate_label_image(first_name, last_name)
-
-        if not self.label_image_path:
-            self.logger.error("Failed to generate label image file.")
-            return
+        if not self._generate_label_image(first_name, last_name):
+            return False
 
         try:
             if self.os_type == "Windows" and self.win32print:
@@ -71,96 +56,85 @@ class Printer:
                 self._print_image_linux()
             else:
                 self.logger.error("No supported printing backend available.")
+                return False
             return True
         finally:
-            # Clean up the temp file
             if self.label_image_path and os.path.exists(self.label_image_path):
                 os.remove(self.label_image_path)
                 self.logger.debug(f"Deleted temp file {self.label_image_path}")
-            self.label_image_path = None
-            return False
+                self.label_image_path = None
 
     def _generate_label_image(self, first_name, last_name):
-        width = self.label_width
-        height = self.label_height
         try:
-            self.logger.debug(f"Generating label image for: {first_name} {last_name} ({width}x{height})")
-            image = Image.new('RGB', (width, height), color='white')
-            draw = ImageDraw.Draw(image)
-
-            # Scale fonts proportionally
+            img = Image.new('RGB', (self.label_width, self.label_height), 'white')
+            draw = ImageDraw.Draw(img)
             try:
-                font_large = ImageFont.truetype("arial.ttf", int(height * 0.25))  # ~25% of height
-                font_small = ImageFont.truetype("arial.ttf", int(height * 0.15))  # ~15% of height
+                font_large = ImageFont.truetype("arial.ttf", int(self.label_height * 0.25))
+                font_small = ImageFont.truetype("arial.ttf", int(self.label_height * 0.15))
             except IOError:
-                font_large = ImageFont.load_default()
-                font_small = ImageFont.load_default()
+                font_large = font_small = ImageFont.load_default()
 
-            draw.text((width // 2, int(height * 0.35)), first_name, font=font_large, fill='black', anchor="mm")
-            draw.text((width // 2, int(height * 0.7)), last_name, font=font_small, fill='black', anchor="mm")
+            draw.text((self.label_width // 2, int(self.label_height * 0.35)), first_name, font=font_large, fill='black', anchor='mm')
+            draw.text((self.label_width // 2, int(self.label_height * 0.7)), last_name, font=font_small, fill='black', anchor='mm')
 
             with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as temp:
-                image.save(temp.name)
+                img.save(temp.name)
                 self.label_image_path = temp.name
-                self.logger.info(f"Label image saved to {self.label_image_path}")
+                self.logger.info(f"Label image saved to {temp.name}")
+            return True
         except Exception:
             self.logger.exception("Failed to generate label image")
-            raise
-
+            return False
 
     def _print_image_windows(self):
         try:
             import win32ui
             from PIL import ImageWin
 
-            printer_name = self.selected_printer or self.win32print.GetDefaultPrinter()
+            printer = self.selected_printer or self.win32print.GetDefaultPrinter()
             hdc = win32ui.CreateDC()
-            hdc.CreatePrinterDC(printer_name)
+            hdc.CreatePrinterDC(printer)
             hdc.StartDoc("Nametag")
             hdc.StartPage()
 
             img = Image.open(self.label_image_path)
-            dib = ImageWin.Dib(img)
-            dib.draw(hdc.GetHandleOutput(), (0, 0, img.width, img.height))
+            ImageWin.Dib(img).draw(hdc.GetHandleOutput(), (0, 0, img.width, img.height))
 
             hdc.EndPage()
             hdc.EndDoc()
             hdc.DeleteDC()
-            self.logger.info("Printed label image on Windows.")
+            self.logger.info("Printed on Windows")
         except Exception:
-            self.logger.exception("Failed to print image on Windows")
+            self.logger.exception("Windows printing failed")
 
     def _print_image_linux(self):
         try:
             conn = self.cups.Connection()
-            printer_name = self.selected_printer or conn.getDefault()
-            conn.printFile(printer_name, self.label_image_path, "Nametag", {})
-            self.logger.info(f"Printed to {printer_name} on Linux.")
+            printer = self.selected_printer or conn.getDefault()
+            conn.printFile(printer, self.label_image_path, "Nametag", {})
+            self.logger.info(f"Printed to {printer} on Linux")
         except Exception:
-            self.logger.exception("Failed to print image on Linux")
+            self.logger.exception("Linux printing failed")
 
     def list_printers(self):
         try:
             if self.os_type == "Windows" and self.win32print:
-                printers = [printer[2] for printer in self.win32print.EnumPrinters(2)]
+                return [p[2] for p in self.win32print.EnumPrinters(2)]
             elif self.os_type == "Linux" and self.cups:
-                conn = self.cups.Connection()
-                printers = list(conn.getPrinters().keys())
+                return list(self.cups.Connection().getPrinters().keys())
             else:
-                raise EnvironmentError("Printer listing not supported on this OS.")
-            self.logger.info(f"Available printers: {printers}")
-            return printers
+                raise EnvironmentError("Unsupported OS for printer listing")
         except Exception:
-            self.logger.exception("Failed to list printers.")
+            self.logger.exception("Failed to list printers")
             return []
-        
-    def select_printer(self, printer_name):
+
+    def select_printer(self, name):
         printers = self.list_printers()
-        if printer_name in printers:
-            self.selected_printer = printer_name
-            self.logger.info(f"Selected printer: {printer_name}")
+        if name in printers:
+            self.selected_printer = name
+            self.logger.info(f"Selected printer: {name}")
         else:
-            self.logger.warning(f"Printer '{printer_name}' not found. Available: {printers}")
+            self.logger.warning(f"Printer '{name}' not found. Available: {printers}")
             self.selected_printer = None
 
 class Twibbly():
