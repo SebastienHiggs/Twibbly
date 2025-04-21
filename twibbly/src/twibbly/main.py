@@ -154,6 +154,11 @@ class Twibbly():
     def __init__(self, supabase, session_id):
         self.supabase = supabase
         self.SESSION_ID = session_id
+        self.setup_printer()
+    
+    def setup_printer(self):
+        self.printer = Printer()
+        self.printer.select_printer(printer_name='DYMO LabelWriter 450')
 
     @classmethod
     async def create(cls):
@@ -177,7 +182,7 @@ class Twibbly():
         # if new_row["session_id"] != self.SESSION_ID:
         #     return
         print(f"🖨️ Got new row: {first_name} {last_name}")
-
+        self.printer.print_name(first_name=first_name, last_name=last_name)
         await self.supabase.table("name_entries").update({"printed": True}).eq("id", row_id).execute()
 
     def handle_insert(self, payload):
