@@ -223,5 +223,3 @@ if __name__ == "__main__":
     printer = Printer()
     printer.select_printer(printer_name='DYMO LabelWriter 450')
     printer.print_name("Mee", "Youu")
-
-
