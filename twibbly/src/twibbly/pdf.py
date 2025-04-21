@@ -8,7 +8,6 @@ SUMATRA_PATH = r"C:\Users\Sebastien\AppData\Local\SumatraPDF\SumatraPDF.exe"  # 
 LABEL_FILENAME = "label.pdf"
 
 def generate_pdf_label(first_name, last_name, filename=LABEL_FILENAME):
-    # Physical label size: 36mm (width) x 89mm (height)
     label_width_mm = 36
     label_height_mm = 89
     page_width = label_width_mm * mm
@@ -16,23 +15,44 @@ def generate_pdf_label(first_name, last_name, filename=LABEL_FILENAME):
 
     c = canvas.Canvas(filename, pagesize=(page_width, page_height))
 
-    # Rotate the canvas to write horizontal text on vertical label
-    c.translate(0, page_height)  # Move origin to top-left
-    c.rotate(-90)  # Rotate clockwise
+    # Rotate to draw horizontally on vertical label
+    c.translate(0, page_height)
+    c.rotate(-90)
 
-    # Now draw text on a virtual 89mm x 36mm landscape layout
-    label_width = page_height
-    label_height = page_width
+    label_width = page_height  # 89 mm
+    label_height = page_width  # 36 mm
 
-    c.setFont("Helvetica-Bold", 22)
-    c.drawCentredString(label_width / 2, label_height * 0.65, first_name)
+    # 🔲 Outer border: actual label size (for debugging)
+    c.setLineWidth(0.5)
+    c.setStrokeGray(0.75)  # Light grey outline for debugging
+    c.rect(0, 0, label_width, label_height)
 
-    c.setFont("Helvetica", 16)
-    c.drawCentredString(label_width / 2, label_height * 0.35, last_name)
+    margin = 15
+
+    # 📏 Safe margin box (~3mm padding)
+    margin_x = margin * mm
+    margin_y = margin * mm
+    safe_x = margin_x
+    safe_y = margin_y
+    safe_width = label_width - 2 * margin_x
+    safe_height = label_height - 2 * margin_y
+
+    c.setStrokeGray(0)  # black
+    c.setLineWidth(1)
+    c.rect(0, 0, safe_width, safe_height)
+
+    # 🖋 Text centered in safe zone
+    center_x = label_width / 2
+    c.setFont("Helvetica-Bold", 20)
+    c.drawCentredString(center_x, safe_y + safe_height * 0.65, first_name)
+
+    c.setFont("Helvetica", 14)
+    c.drawCentredString(center_x, safe_y + safe_height * 0.35, last_name)
 
     c.showPage()
     c.save()
-    print(f"✅ PDF label generated at: {os.path.abspath(filename)}")
+    print(f"✅ PDF label with margins saved to: {os.path.abspath(filename)}")
+
 
 def get_printers():
     return [printer[2] for printer in win32print.EnumPrinters(2)]
@@ -44,18 +64,18 @@ def print_with_sumatra(filename=LABEL_FILENAME, printer_name=None):
     abs_path = os.path.abspath(filename)
     print(f"🖨️ Printing '{abs_path}' to printer: {printer_name}")
 
+    command = f'"{SUMATRA_PATH}" -print-to "{printer_name}" -silent "{abs_path}"'
     try:
-        subprocess.run([
-            SUMATRA_PATH,
-            "-print-to", printer_name,
-            "-silent",
-            abs_path
-        ], check=True)
-        print("✅ Print job sent successfully.")
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Print failed: {e}")
-    except FileNotFoundError:
-        print(f"❌ SumatraPDF not found at: {SUMATRA_PATH}")
+        # Use shell=True to run like CMD does
+        result = subprocess.run(command, shell=True, capture_output=True, text=True)
+        print("stdout:", result.stdout)
+        print("stderr:", result.stderr)
+        if result.returncode == 0:
+            print("✅ Print job sent successfully.")
+        else:
+            print(f"❌ Print failed with return code {result.returncode}")
+    except Exception as e:
+        print(f"❌ Exception while printing: {e}")
 
 if __name__ == "__main__":
     print("📋 Available printers:")
