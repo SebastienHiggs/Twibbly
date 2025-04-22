@@ -1,10 +1,10 @@
 import { useRouter } from "next/router"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabaseClient"
 
 export default function SiteAccessPage() {
   const router = useRouter()
-  const { id: siteId } = router.query
+  const { id: siteIdRaw } = router.query
 
   const [accessCode, setAccessCode] = useState("")
   const [submitted, setSubmitted] = useState(false)
@@ -12,29 +12,54 @@ export default function SiteAccessPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
+  // Log when siteId becomes available
+  useEffect(() => {
+    console.log("[router.query.id]", siteIdRaw, "typeof:", typeof siteIdRaw)
+  }, [siteIdRaw])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
-    if (!siteId) return
+    // Ensure siteId is a string
+    const siteId = typeof siteIdRaw === "string" ? siteIdRaw : null
 
-    // Validate site and access code in one go
+    console.log("[handleSubmit] Access code entered:", accessCode)
+    console.log("[handleSubmit] Site ID from query:", siteId, "typeof:", typeof siteId)
+
+    if (!siteId) {
+      console.warn("[handleSubmit] Invalid siteId — aborting")
+      setError("Invalid site ID.")
+      setLoading(false)
+      return
+    }
+
+    const trimmedAccessCode = accessCode.trim()
+    console.log("[handleSubmit] Trimmed access code:", trimmedAccessCode)
+
+    // ✅ Validate site + access_code
     const { data: site, error: siteError } = await supabase
       .from("sites")
       .select("id")
       .eq("id", siteId)
-      .eq("access_code", accessCode)
+      .eq("access_code", trimmedAccessCode)
       .maybeSingle()
 
+    console.log("[Supabase] Site query result:", site)
+    console.log("[Supabase] Site query error:", siteError)
+
     if (siteError || !site) {
+      console.warn("[handleSubmit] Site not found or access code incorrect")
       setError("Site not found or incorrect access code.")
       setLoading(false)
       return
     }
 
-    // Fetch upcoming sessions
+    // ✅ Fetch upcoming sessions
     const now = new Date().toISOString()
+    console.log("[handleSubmit] Current timestamp:", now)
+
     const { data: sessionData, error: sessionError } = await supabase
       .from("sessions")
       .select("id, title, start_time, access_code")
@@ -42,17 +67,23 @@ export default function SiteAccessPage() {
       .gt("end_time", now)
       .order("start_time", { ascending: true })
 
+    console.log("[Supabase] Sessions data:", sessionData)
+    console.log("[Supabase] Sessions error:", sessionError)
+
     if (sessionError) {
       setError("Failed to load sessions.")
     } else {
-      setSessions(sessionData)
+      setSessions(sessionData || [])
       setSubmitted(true)
     }
 
     setLoading(false)
   }
 
-  if (!siteId) return null
+  if (!siteIdRaw) {
+    console.log("[render] Waiting for router.query.id to load...")
+    return null
+  }
 
   return (
     <div className="max-w-md mx-auto mt-10 px-4">
@@ -72,7 +103,7 @@ export default function SiteAccessPage() {
           />
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || typeof siteIdRaw !== "string"}
             className="bg-blue-600 text-white w-full px-4 py-2 rounded"
           >
             {loading ? "Checking..." : "Continue"}
