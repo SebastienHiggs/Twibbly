@@ -11,6 +11,7 @@ export default function SiteAccessPage() {
   const [sessions, setSessions] = useState<any[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [siteName, setSiteName] = useState<string | null>(null)
 
   // Log when siteId becomes available
   useEffect(() => {
@@ -25,7 +26,7 @@ export default function SiteAccessPage() {
     // Ensure siteId is a string
     const siteId = typeof siteIdRaw === "string" ? siteIdRaw : null
 
-    console.log("[handleSubmit] Access code entered:", accessCode)
+    console.log("[handleSubmit] Access code entered:", accessCode, "typeof:", typeof accessCode)
     console.log("[handleSubmit] Site ID from query:", siteId, "typeof:", typeof siteId)
 
     if (!siteId) {
@@ -38,23 +39,24 @@ export default function SiteAccessPage() {
     const trimmedAccessCode = accessCode.trim()
     console.log("[handleSubmit] Trimmed access code:", trimmedAccessCode)
 
-    // ✅ Validate site + access_code
     const { data: site, error: siteError } = await supabase
-      .from("sites")
-      .select("id")
-      .eq("id", siteId)
-      .eq("access_code", trimmedAccessCode)
-      .maybeSingle()
+        .from("sites")
+        .select("id, name")
+        .eq("id", siteId)
+        .eq("access_code", trimmedAccessCode)
+        .maybeSingle()
 
     console.log("[Supabase] Site query result:", site)
     console.log("[Supabase] Site query error:", siteError)
 
     if (siteError || !site) {
-      console.warn("[handleSubmit] Site not found or access code incorrect")
-      setError("Site not found or incorrect access code.")
-      setLoading(false)
-      return
+        console.warn("[handleSubmit] Site not found or access code incorrect")
+        setError("Site not found or incorrect access code.")
+        setLoading(false)
+        return
     }
+
+    setSiteName(site.name)  // ✅ only do this after checking it's not null
 
     // ✅ Fetch upcoming sessions
     const now = new Date().toISOString()
@@ -62,7 +64,7 @@ export default function SiteAccessPage() {
 
     const { data: sessionData, error: sessionError } = await supabase
       .from("sessions")
-      .select("id, title, start_time, access_code")
+      .select("id, title, start_time")
       .eq("site_id", siteId)
       .gt("end_time", now)
       .order("start_time", { ascending: true })
@@ -87,7 +89,9 @@ export default function SiteAccessPage() {
 
   return (
     <div className="max-w-md mx-auto mt-10 px-4">
-      <h1 className="text-2xl font-bold text-center mb-4">Access Site</h1>
+      <h1 className="text-2xl font-bold text-center mb-4">
+        {siteName ? `Access ${siteName}` : "Access Site"}
+      </h1>
 
       {error && <p className="text-red-600 text-center mb-3">{error}</p>}
 
