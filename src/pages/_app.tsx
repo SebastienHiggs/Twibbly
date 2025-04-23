@@ -10,26 +10,16 @@ function InsertUserIfNeeded() {
 
   useEffect(() => {
     const insertUser = async () => {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      console.log("🧪 [Auth Debug] Session user ID:", sessionData?.session?.user?.id);
-      console.log("🧪 [Auth Debug] Supabase token:", sessionData?.session?.access_token);
-
       const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
-
-      if (authError || !authUser) {
-        console.warn("❌ No auth session yet")
+  
+      // Require both to be ready
+      if (!authUser?.id || !user?.id || authUser.id !== user.id || inserted) {
+        console.warn("🔁 Skipping insert — user not ready or already inserted")
         return
       }
-
-      // 🔍 Debug log to ensure matching
-      console.log("🧠 Supabase Auth User:", authUser.id, authUser.email)
-      console.log("🧠 useUser hook User:", user?.id, user?.email)
-
-      if (!authUser.email || inserted) {
-        console.warn("🔁 Skipping insert: email missing or already inserted")
-        return
-      }
-
+  
+      console.log("✅ Auth + Hook user match:", authUser.id)
+  
       type UserRole = "super_admin" | "org_admin" | "org_user" | "user"
 
       const { error: insertError } = await supabase
