@@ -22,23 +22,45 @@ export default function AdminDashboard() {
   // 🧾 Fetch sites if logged in
   useEffect(() => {
     const fetchSites = async () => {
-      if (!user) return
+      if (!user || !user.id) return
+  
+      // You need to query from the `public.users` table
+      const { data: dbUser, error: userFetchError } = await supabase
+        .from("app_users")
+        .select("organisation_id")
+        .eq("id", user.id)
+        .maybeSingle()
+  
+      if (userFetchError) {
+        console.error("❌ Failed to fetch org from users table:", userFetchError.message)
+        setLoadingSites(false)
+        return
+      }
+  
+      if (!dbUser?.organisation_id) {
+        console.warn("⚠️ No organisation_id for user — show org creation?")
+        setSites([])
+        setLoadingSites(false)
+        return
+      }
+  
       const { data, error } = await supabase
         .from("sites")
         .select("*")
-        .eq("organisation_id", user.user_metadata?.organisation_id)
-
+        .eq("organisation_id", dbUser.organisation_id)
+  
       if (error) {
-        console.error("Failed to fetch sites:", error.message)
+        console.error("❌ Failed to fetch sites:", error.message)
       } else {
         setSites(data || [])
       }
-
+  
       setLoadingSites(false)
     }
-
+  
     fetchSites()
   }, [user])
+  
 
   const signOut = async () => {
     await supabase.auth.signOut()
