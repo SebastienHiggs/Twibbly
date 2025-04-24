@@ -1,10 +1,10 @@
 import { useState } from "react"
 import { useRouter } from "next/router"
-import { useUser } from "@supabase/auth-helpers-react"
-import { supabase } from "@/lib/supabaseClient"
+import { useUser, useSessionContext } from "@supabase/auth-helpers-react"
 
 export default function CreateOrgPage() {
   const user = useUser()
+  const { supabaseClient } = useSessionContext()
   const router = useRouter()
   const [orgName, setOrgName] = useState("")
   const [loading, setLoading] = useState(false)
@@ -15,27 +15,29 @@ export default function CreateOrgPage() {
     setLoading(true)
     setError(null)
 
-    const { data: { session } } = await supabase.auth.getSession()
-    console.log("🧾 Insert Org session:", session)
+    const { data: sessionData } = await supabaseClient.auth.getSession()
+    console.log("🧾 Insert Org session:", sessionData)
 
-    const { data: org, error: orgError } = await supabase
+    const { data: org, error: orgError } = await supabaseClient
       .from("organisations")
       .insert({ name: orgName })
       .select("id")
       .single()
 
     if (orgError || !org) {
+      console.error("❌ Failed org insert:", orgError)
       setError("Failed to create organisation.")
       setLoading(false)
       return
     }
 
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseClient
       .from("app_users")
       .update({ organisation_id: org.id })
       .eq("id", user?.id)
 
     if (updateError) {
+      console.error("❌ Failed to update user org:", updateError)
       setError("Failed to link organisation.")
       setLoading(false)
       return
